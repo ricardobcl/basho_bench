@@ -72,6 +72,7 @@ new(Id) ->
 
     case riak:client_connect(TargetNode) of
         {ok, Client} ->
+            Client:set_bucket(Bucket, [{allow_mult, true}]),
             {ok, #state { client = Client,
                           bucket = Bucket,
                           replies = Replies }};
