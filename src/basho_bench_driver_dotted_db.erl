@@ -77,17 +77,18 @@ new(Id) ->
 
 run(get, KeyGen, _ValueGen, State) ->
     case (State#state.client):get(KeyGen()) of
-        {ok, not_found} ->
+        {not_found, _Context} ->
             {ok, State};
-        {ok, _} ->
+        {ok, _ValuesContext} ->
             {ok, State};
         {error, Reason} ->
             {error, Reason, State}
     end;
 
 run(put, KeyGen, ValueGen, State) ->
-    Obj = [KeyGen(), ValueGen()],
-    case (State#state.client):put(Obj) of
+    Key = KeyGen(),
+    Value = ValueGen(),
+    case (State#state.client):put_at_node(Key, Value) of
         ok ->
             {ok, State};
         {error, Reason} ->
@@ -96,55 +97,39 @@ run(put, KeyGen, ValueGen, State) ->
 
 run(update, KeyGen, ValueGen, State) ->
     Key = KeyGen(),
-    NewValue = ValueGen(),
-    case (State#state.client):get(Key) of
-        {ok, {_Values, Context}} ->
-            UpdatedObj = [Key, NewValue, Context],
-            case (State#state.client):put(UpdatedObj) of
-                ok ->
-                    {ok, State};
-                {error, Reason} ->
-                    {error, Reason, State}
-            end;
-        {ok, not_found} ->
-            NewObj = [Key, NewValue],
-            case (State#state.client):put(NewObj) of
-                ok ->
-                    {ok, State};
-                {error, Reason} ->
-                    {error, Reason, State}
-            end
-    end;
-
-run(delete, KeyGen, _ValueGen, State) ->
-    case (State#state.client):delete([KeyGen()]) of
+    Value = ValueGen(),
+    Context = case (State#state.client):get(Key) of
+        {ok, {_Values, Ctx}} -> Ctx;
+        {not_found, Ctx} -> Ctx
+    end,
+    case (State#state.client):put_at_node(Key, Value, Context) of
         ok ->
             {ok, State};
-        % {error, not_found} ->
-        %     {ok, State};
         {error, Reason} ->
             {error, Reason, State}
     end;
 
-run(proper_delete, KeyGen, _ValueGen, State) ->
+run(delete, KeyGen, _ValueGen, State) ->
     Key = KeyGen(),
-    case (State#state.client):get(Key) of
-        {ok, {_Values, Context}} ->
-            DelExistingObj = [Key, Context],
-            case (State#state.client):delete(DelExistingObj) of
-                ok ->
-                    {ok, State};
-                {error, Reason} ->
-                    {error, Reason, State}
-            end;
-        {ok, not_found} ->
-            case (State#state.client):delete([Key]) of
-                ok ->
-                    {ok, State};
-                {error, Reason} ->
-                    {error, Reason, State}
-            end
+    Context = case (State#state.client):get(Key) of
+        {ok, {_Values, Ctx}} -> Ctx;
+        {not_found, Ctx} -> Ctx
+    end,
+    case (State#state.client):delete_at_node(Key, Context) of
+        ok ->
+            {ok, State};
+        {error, Reason} ->
+            {error, Reason, State}
+    end;
+
+run(sync, _KeyGen, _ValueGen, State) ->
+    case (State#state.client):sync_at_node() of
+        {ok, _Stats} ->
+            {ok, State};
+        {error, Reason} ->
+            {error, Reason, State}
     end.
+
 
 
 %% ====================================================================
