@@ -19,7 +19,7 @@
 %% under the License.
 %%
 %% -------------------------------------------------------------------
--module(basho_bench_driver_dotted_db).
+-module(basho_bench_driver_basic_db).
 
 -export([new/1,
          run/4]).
@@ -33,18 +33,18 @@
 %% ====================================================================
 
 new(Id) ->
-    %% Make sure the path is setup such that we can get at dotted_db
-    case code:which(dotted_db) of
+    %% Make sure the path is setup such that we can get at basic_db
+    case code:which(basic_db) of
         non_existing ->
-            ?FAIL_MSG("~s requires dotted_db module to be available on code path.\n",
+            ?FAIL_MSG("~s requires basic_db module to be available on code path.\n",
                       [?MODULE]);
         _ ->
             ok
     end,
 
-    Nodes   = basho_bench_config:get(dotted_db_nodes),
-    Cookie  = basho_bench_config:get(dotted_db_cookie, 'dotted_db'),
-    MyNode  = basho_bench_config:get(dotted_db_mynode, [basho_bench, longnames]),
+    Nodes   = basho_bench_config:get(basic_db_nodes),
+    Cookie  = basho_bench_config:get(basic_db_cookie, 'basic_db'),
+    MyNode  = basho_bench_config:get(basic_db_mynode, [basho_bench, longnames]),
 
     %% Try to spin up net_kernel
     case net_kernel:start(MyNode) of
@@ -66,11 +66,11 @@ new(Id) ->
     TargetNode = lists:nth((Id rem length(Nodes)+1), Nodes),
     ?INFO("Using target node ~p for worker ~p\n", [TargetNode, Id]),
 
-    case dotted_db:new_client(TargetNode) of
+    case basic_db:new_client(TargetNode) of
         {ok, Client} ->
             {ok, #state { client = Client }};
         {error, Reason2} ->
-            ?FAIL_MSG("Failed get a dotted_db:new_client to ~p: ~p\n", [TargetNode, Reason2])
+            ?FAIL_MSG("Failed get a basic_db:new_client to ~p: ~p\n", [TargetNode, Reason2])
     end.
 
 run(get, KeyGen, _ValueGen, State) ->
