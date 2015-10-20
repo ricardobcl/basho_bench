@@ -168,7 +168,12 @@ handle_info({'EXIT', Pid, Reason}, State) ->
             {stop, normal, State}
     end.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    State#state.worker_pid ! {stop_please, self()},
+    receive
+        terminate_done ->
+            ok
+    end,
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -213,7 +218,7 @@ ops_tuple() ->
 worker_init(State) ->
     %% Trap exits from linked parent process; use this to ensure the driver
     %% gets a chance to cleanup
-    process_flag(trap_exit, true),
+    process_flag(trap_exit, false),
     random:seed(State#state.rng_seed),
     worker_idle_loop(State).
 
@@ -312,6 +317,10 @@ worker_next_op(State) ->
 needs_shutdown(State) ->
     Parent = State#state.parent_pid,
     receive
+        {stop_please, Caller} ->
+            (catch (State#state.driver):terminate(normal, State#state.driver_state)),
+            Caller ! terminate_done,
+            true;
         {'EXIT', Pid, _Reason} ->
             case Pid of
                 Parent ->
