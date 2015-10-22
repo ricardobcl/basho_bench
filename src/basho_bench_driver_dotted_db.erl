@@ -46,7 +46,8 @@ new(Id) ->
     Nodes           = basho_bench_config:get(dotted_db_nodes),
     Cookie          = basho_bench_config:get(dotted_db_cookie, 'dotted_db'),
     MyNode          = basho_bench_config:get(dotted_db_mynode, [basho_bench, longnames]),
-    SyncInterval    = basho_bench_config:get(dotted_db_sync_interval, 500),
+    SyncInterval    = basho_bench_config:get(dotted_db_sync_interval, 200),
+    StripInterval   = basho_bench_config:get(dotted_db_strip_interval, 2000),
     ReplicationRate = basho_bench_config:get(dotted_db_replication_fail_rate, 0),
     KillRate        = basho_bench_config:get(dotted_db_node_kill_rate, 0),
 
@@ -73,6 +74,7 @@ new(Id) ->
     case dotted_db:new_client(TargetNode) of
         {ok, Client} ->
             Client:set_sync_interval(SyncInterval),
+            Client:set_strip_interval(StripInterval),
             Client:set_kill_node_rate(KillRate),
             {ok, #state { client = Client, options=[{repl_fail_ratio, ReplicationRate}]}};
         {error, Reason2} ->
@@ -128,7 +130,11 @@ run(delete, KeyGen, _ValueGen, State) ->
 
 terminate(_, State) ->
     lager:info("Reseting DB options: client -> ~p", [State#state.client]),
-    (State#state.client):set_sync_interval(600),
+    SyncInterval = basho_bench_config:get(dotted_db_sync_interval, 200),
+    StripInterval = basho_bench_config:get(dotted_db_strip_interval, 2000),
+    (State#state.client):set_sync_interval(SyncInterval),
+    (State#state.client):set_strip_interval(StripInterval),
+    %% stop killing vnodes
     (State#state.client):set_kill_node_rate(0),
     {ok, State}.
 
