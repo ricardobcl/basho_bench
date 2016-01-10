@@ -22,11 +22,12 @@
 -module(basho_bench_driver_basic_db).
 
 -export([new/1,
+         terminate/2,
          run/4]).
 
 -include("basho_bench.hrl").
 
--record(state, {client}).
+-record(state, {client, options}).
 
 %% ====================================================================
 %% API
@@ -45,6 +46,9 @@ new(Id) ->
     Nodes   = basho_bench_config:get(basic_db_nodes),
     Cookie  = basho_bench_config:get(basic_db_cookie, 'basic_db'),
     MyNode  = basho_bench_config:get(basic_db_mynode, [basho_bench, longnames]),
+    SyncInterval    = basho_bench_config:get(basic_db_sync_interval, 200),
+    ReplicationRate = basho_bench_config:get(basic_db_replication_fail_rate, 0),
+    KillRate        = basho_bench_config:get(basic_db_node_kill_rate, 0),
 
     %% Try to spin up net_kernel
     case net_kernel:start(MyNode) of
@@ -68,7 +72,9 @@ new(Id) ->
 
     case basic_db:new_client(TargetNode) of
         {ok, Client} ->
-            {ok, #state { client = Client }};
+            Client:set_sync_interval(SyncInterval),
+            Client:set_kill_node_rate(KillRate),
+            {ok, #state { client = Client, options=[{repl_fail_ratio, ReplicationRate}]}};
         {error, Reason2} ->
             ?FAIL_MSG("Failed get a basic_db:new_client to ~p: ~p\n", [TargetNode, Reason2])
     end.
@@ -86,7 +92,7 @@ run(get, KeyGen, _ValueGen, State) ->
 run(put, KeyGen, ValueGen, State) ->
     Key = KeyGen(),
     Value = ValueGen(),
-    case (State#state.client):new_at_node(Key, Value) of
+    case (State#state.client):new_at_node(Key, Value, State#state.options) of
         ok ->
             {ok, State};
         {error, Reason} ->
@@ -100,7 +106,7 @@ run(update, KeyGen, ValueGen, State) ->
         {ok, {_Values, Ctx}} -> Ctx;
         {not_found, Ctx} -> Ctx
     end,
-    case (State#state.client):put_at_node(Key, Value, Context) of
+    case (State#state.client):put_at_node(Key, Value, Context, State#state.options) of
         ok ->
             {ok, State};
         {error, Reason} ->
@@ -113,13 +119,20 @@ run(delete, KeyGen, _ValueGen, State) ->
         {ok, {_Values, Ctx}} -> Ctx;
         {not_found, Ctx} -> Ctx
     end,
-    case (State#state.client):delete_at_node(Key, Context) of
+    case (State#state.client):delete_at_node(Key, Context, State#state.options) of
         ok ->
             {ok, State};
         {error, Reason} ->
             {error, Reason, State}
     end.
 
+terminate(_, State) ->
+    lager:info("Reseting DB options: client -> ~p", [State#state.client]),
+    SyncInterval = basho_bench_config:get(basic_db_sync_interval, 200),
+    (State#state.client):set_sync_interval(SyncInterval),
+    %% stop killing vnodes
+    (State#state.client):set_kill_node_rate(0),
+    {ok, State}.
 
 
 %% ====================================================================
